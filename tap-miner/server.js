@@ -15,31 +15,8 @@ const server = http.createServer(app);
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve static files with caching
-app.use(express.static(path.join(__dirname, 'public'), {
-    maxAge: '1h',
-    etag: true,
-    lastModified: true
-}));
-
-// Basic security headers
-app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    next();
-});
-
-// Enable WebSocket server with client tracking
-const wss = new WebSocket.Server({ 
-    server,
-    // Enable ping/pong heartbeat
-    clientTracking: true,
-    heartbeat: true
-});
-
-// Serve static files
-app.use(express.static('public'));
+// WebSocket server setup
+const wss = new WebSocket.Server({ server });
 
 // Game state
 let gameState = {
@@ -190,11 +167,11 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-console.log('Environment:', {
-    PORT: PORT,
-    PRODUCTION: PRODUCTION,
-    NODE_ENV: process.env.NODE_ENV,
-    RAILWAY_STATIC_URL: process.env.RAILWAY_STATIC_URL
+// Log environment details
+log('Environment:', {
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV,
+    railwayUrl: process.env.RAILWAY_STATIC_URL || 'not set'
 });
 
 // Serve static files from public directory
