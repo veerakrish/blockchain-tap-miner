@@ -3,28 +3,17 @@ const http = require('http');
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const path = require('path');
-const compression = require('compression');
-const helmet = require('helmet');
 
-// Enable debug logging
-const DEBUG = process.env.NODE_ENV !== 'production';
+// Simple logging
 function log(...args) {
-    if (DEBUG || args[0] === 'ERROR') console.log(new Date().toISOString(), ...args);
+    console.log(new Date().toISOString(), ...args);
 }
 
-// Track server state
-let isShuttingDown = false;
-
 const app = express();
-
-// Add security middleware
-app.use(helmet());
-
-// Add compression
-app.use(compression());
-
-// Create HTTP server
 const server = http.createServer(app);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve static files with caching
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -192,38 +181,14 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Production settings
+// Server settings
 const PORT = process.env.PORT || 3001;
-const PRODUCTION = process.env.RAILWAY_STATIC_URL ? true : false;
+let isShuttingDown = false;
 
-// Server state
-let serverState = {
-    startTime: Date.now(),
-    connections: 0,
-    gamesPlayed: 0,
-    isShuttingDown: false,
-    readyForConnections: false
-};
-
-// Configuration
-const CONFIG = {
-    pingInterval: 30000,    // 30 seconds
-    pingTimeout: 5000,      // 5 seconds
-    shutdownTimeout: 10000,  // 10 seconds
-    maxReconnectAttempts: 5
-};
-
-// Verify environment
-try {
-    const publicPath = path.join(__dirname, 'public');
-    if (!require('fs').existsSync(publicPath)) {
-        throw new Error('Public directory not found');
-    }
-    log('Public directory verified:', publicPath);
-} catch (error) {
-    console.error('Environment verification failed:', error);
-    process.exit(1);
-}
+// Basic health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
 
 console.log('Environment:', {
     PORT: PORT,
@@ -296,38 +261,26 @@ function gracefulShutdown(signal) {
     });
 }
 
-// Initialize server
-function initializeServer() {
-    return new Promise((resolve, reject) => {
-        try {
-            server.listen(PORT, '0.0.0.0', () => {
-                serverState.readyForConnections = true;
-                log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
-                log('Server configuration:', {
-                    port: PORT,
-                    production: PRODUCTION,
-                    nodeEnv: process.env.NODE_ENV,
-                    publicPath: path.join(__dirname, 'public'),
-                    startTime: new Date(serverState.startTime).toISOString()
-                });
-                startNewGame();
-                resolve();
-            });
+// Start server
+server.listen(PORT, () => {
+    log(`Server running on port ${PORT}`);
+    startNewGame();
+});
 
-            server.on('error', (error) => {
-                log('Server error:', error);
-                reject(error);
-            });
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
+// Handle errors
+server.on('error', (error) => {
+    log('Server error:', error);
+});
 
-// Start server with error handling
-initializeServer().catch(error => {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+process.on('SIGTERM', () => {
+    log('Received SIGTERM');
+    if (!isShuttingDown) {
+        isShuttingDown = true;
+        server.close(() => {
+            log('Server closed');
+            process.exit(0);
+        });
+    }
 });
 
 // Handle shutdown signals
