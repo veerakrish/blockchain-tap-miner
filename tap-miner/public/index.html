@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap Miner Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="login-screen" class="screen">
+        <h1>Tap Miner</h1>
+        <p>Compete to find hashes with the most leading zeros!</p>
+        <div class="login-form">
+            <input type="text" id="player-name" placeholder="Enter your name">
+            <button id="join-btn">Join Game</button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="screen hidden">
+        <div class="game-header">
+            <div class="player-info">
+                <span>Player: <span id="player-display"></span></span>
+                <span>Players Online: <span id="player-count">0</span></span>
+            </div>
+            <div class="timer">Time: <span id="countdown">2:00</span></div>
+        </div>
+
+        <div class="game-area">
+            <div id="tap-area">
+                <div class="tap-count">Taps: <span id="tap-counter">0</span></div>
+                <div class="tap-instruction">TAP HERE TO MINE!</div>
+                <div class="last-hash">Last Hash: <span id="current-hash">-</span></div>
+                <div class="leading-zeros">Leading Zeros: <span id="zero-count">0</span></div>
+            </div>
+
+            <div class="hash-feed">
+                <h3>Recent Hashes</h3>
+                <div id="hash-list"></div>
+            </div>
+        </div>
+
+        <div id="winner-announcement" class="hidden">
+            <h2>Winner!</h2>
+            <div id="winner-details"></div>
+            <div>Next game starts in <span id="next-game-countdown">10</span> seconds</div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

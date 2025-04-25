@@ -1,0 +1,189 @@
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --background-color: #f5f6fa;
+    --text-color: #2c3e50;
+    --border-color: #dcdde1;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+.screen {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Login Screen */
+#login-screen {
+    text-align: center;
+    padding-top: 100px;
+}
+
+.login-form {
+    margin-top: 30px;
+}
+
+.login-form input {
+    padding: 10px;
+    font-size: 16px;
+    width: 200px;
+    margin-right: 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+/* Game Screen */
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.timer {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.game-area {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 20px;
+}
+
+#tap-area {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.1s;
+}
+
+#tap-area:active {
+    transform: scale(0.98);
+    background-color: #f8f9fa;
+}
+
+.tap-instruction {
+    font-size: 24px;
+    margin: 40px 0;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.tap-count {
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.last-hash {
+    font-family: monospace;
+    word-break: break-all;
+    margin: 10px 0;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.hash-feed {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#hash-list {
+    height: 400px;
+    overflow-y: auto;
+}
+
+.hash-item {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+}
+
+.hash-item .player-name {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.hash-item .hash-value {
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.hash-item .zeros {
+    color: var(--secondary-color);
+}
+
+/* Winner Announcement */
+#winner-announcement {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    text-align: center;
+}
+
+#winner-details {
+    margin: 20px 0;
+}
+
+.winning-hash {
+    font-family: monospace;
+    word-break: break-all;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin: 10px 0;
+}
+
+@media (max-width: 768px) {
+    .game-area {
+        grid-template-columns: 1fr;
+    }
+    
+    .game-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
