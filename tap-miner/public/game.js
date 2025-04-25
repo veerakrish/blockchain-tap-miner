@@ -63,26 +63,42 @@ class TapMinerGame {
 
         // Use secure WebSocket in production
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Don't add port in production (Railway) environment
         const isProduction = window.location.hostname.includes('railway.app');
         const port = isProduction ? '' : ':3001';
         
         const wsUrl = `${protocol}//${window.location.hostname}${port}`;
-        this.log('Connecting to WebSocket:', wsUrl);
+        console.log('Connecting to WebSocket:', wsUrl);
         
-        this.ws = new WebSocket(wsUrl);
+        try {
+            this.ws = new WebSocket(wsUrl);
+            
+            this.ws.onopen = () => {
+                console.log('Connected to game server');
+                document.getElementById('game-status').textContent = 'Connected';
+                document.getElementById('game-status').className = 'connected';
+                this.connected = true;
+                this.gameStatus.textContent = 'Connected';
+            };
+            
+            this.ws.onclose = () => {
+                console.log('Disconnected from game server');
+                document.getElementById('game-status').textContent = 'Disconnected';
+                document.getElementById('game-status').className = 'error';
+                setTimeout(() => this.connectWebSocket(), 3000);
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                document.getElementById('game-status').textContent = 'Connection Error';
+                document.getElementById('game-status').className = 'error';
+            };
+        } catch (error) {
+            console.error('Failed to create WebSocket:', error);
+            document.getElementById('game-status').textContent = 'Connection Failed';
+            document.getElementById('game-status').className = 'error';
+            setTimeout(() => this.connectWebSocket(), 3000);
+        }
         
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            this.handleConnectionError();
-        };
-        
-        this.ws.onopen = () => {
-            console.log('Connected to game server');
-            this.connected = true;
-            this.gameStatus.textContent = 'Connected';
-        };
-
         this.ws.onmessage = (event) => {
             this.handleMessage(event);
         };
