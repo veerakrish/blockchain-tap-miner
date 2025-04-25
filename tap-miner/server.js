@@ -3,17 +3,27 @@ const http = require('http');
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const path = require('path');
+const compression = require('compression');
+const helmet = require('helmet');
 
 // Enable debug logging
-const DEBUG = true;
+const DEBUG = process.env.NODE_ENV !== 'production';
 function log(...args) {
-    if (DEBUG) console.log(new Date().toISOString(), ...args);
+    if (DEBUG || args[0] === 'ERROR') console.log(new Date().toISOString(), ...args);
 }
 
 // Track server state
 let isShuttingDown = false;
 
 const app = express();
+
+// Add security middleware
+app.use(helmet());
+
+// Add compression
+app.use(compression());
+
+// Create HTTP server
 const server = http.createServer(app);
 
 // Serve static files with caching
@@ -186,15 +196,34 @@ wss.on('connection', (ws) => {
 const PORT = process.env.PORT || 3001;
 const PRODUCTION = process.env.RAILWAY_STATIC_URL ? true : false;
 
+// Server state
+let serverState = {
+    startTime: Date.now(),
+    connections: 0,
+    gamesPlayed: 0,
+    isShuttingDown: false,
+    readyForConnections: false
+};
+
+// Configuration
+const CONFIG = {
+    pingInterval: 30000,    // 30 seconds
+    pingTimeout: 5000,      // 5 seconds
+    shutdownTimeout: 10000,  // 10 seconds
+    maxReconnectAttempts: 5
+};
+
 // Verify environment
-if (!path.join(__dirname, 'public')) {
-    console.error('Error: Public directory not found');
+try {
+    const publicPath = path.join(__dirname, 'public');
+    if (!require('fs').existsSync(publicPath)) {
+        throw new Error('Public directory not found');
+    }
+    log('Public directory verified:', publicPath);
+} catch (error) {
+    console.error('Environment verification failed:', error);
     process.exit(1);
 }
-
-// Keep alive ping interval
-const PING_INTERVAL = 30000; // 30 seconds
-const PING_TIMEOUT = 5000;  // 5 seconds timeout
 
 console.log('Environment:', {
     PORT: PORT,
@@ -223,12 +252,21 @@ app.get('/health', (req, res) => {
 
 // Graceful shutdown function
 function gracefulShutdown(signal) {
-    if (isShuttingDown) {
+    if (serverState.isShuttingDown) {
+        log('Shutdown already in progress, ignoring', signal);
         return;
     }
     
-    isShuttingDown = true;
+    serverState.isShuttingDown = true;
     log(`Received ${signal}. Starting graceful shutdown...`);
+    
+    // Stop accepting new connections
+    server.unref();
+    
+    // Stop game timer if running
+    if (gameTimer) {
+        clearTimeout(gameTimer);
+    }
 
     // Notify all clients
     wss.clients.forEach((client) => {
@@ -258,16 +296,38 @@ function gracefulShutdown(signal) {
     });
 }
 
-// Start server
-server.listen(PORT, '0.0.0.0', () => {
-    log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
-    log('Server configuration:', {
-        port: PORT,
-        production: PRODUCTION,
-        nodeEnv: process.env.NODE_ENV,
-        publicPath: path.join(__dirname, 'public')
+// Initialize server
+function initializeServer() {
+    return new Promise((resolve, reject) => {
+        try {
+            server.listen(PORT, '0.0.0.0', () => {
+                serverState.readyForConnections = true;
+                log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
+                log('Server configuration:', {
+                    port: PORT,
+                    production: PRODUCTION,
+                    nodeEnv: process.env.NODE_ENV,
+                    publicPath: path.join(__dirname, 'public'),
+                    startTime: new Date(serverState.startTime).toISOString()
+                });
+                startNewGame();
+                resolve();
+            });
+
+            server.on('error', (error) => {
+                log('Server error:', error);
+                reject(error);
+            });
+        } catch (error) {
+            reject(error);
+        }
     });
-    startNewGame();
+}
+
+// Start server with error handling
+initializeServer().catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
 });
 
 // Handle shutdown signals

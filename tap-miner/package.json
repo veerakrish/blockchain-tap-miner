@@ -5,11 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "prestart": "node -e \"if(require('fs').existsSync(path.join(__dirname,'public'))) process.exit(0); else process.exit(1)\""
   },
   "dependencies": {
     "express": "^4.17.1",
-    "ws": "^8.2.3"
+    "ws": "^8.2.3",
+    "compression": "^1.7.4",
+    "helmet": "^4.6.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.15"
