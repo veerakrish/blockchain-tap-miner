@@ -10,6 +10,9 @@ function log(...args) {
     if (DEBUG) console.log(new Date().toISOString(), ...args);
 }
 
+// Track server state
+let isShuttingDown = false;
+
 const app = express();
 const server = http.createServer(app);
 
@@ -183,6 +186,43 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'healthy' });
 });
 
+// Graceful shutdown function
+function gracefulShutdown(signal) {
+    if (isShuttingDown) {
+        return;
+    }
+    
+    isShuttingDown = true;
+    log(`Received ${signal}. Starting graceful shutdown...`);
+
+    // Notify all clients
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+                type: 'system',
+                message: 'Server is shutting down...'
+            }));
+        }
+    });
+
+    // Close WebSocket server
+    wss.close(() => {
+        log('WebSocket server closed.');
+        
+        // Close HTTP server
+        server.close(() => {
+            log('HTTP server closed.');
+            process.exit(0);
+        });
+
+        // Force close after 10 seconds
+        setTimeout(() => {
+            log('Forcing shutdown after timeout');
+            process.exit(1);
+        }, 10000);
+    });
+}
+
 // Start server
 server.listen(PORT, () => {
     log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
@@ -193,6 +233,22 @@ server.listen(PORT, () => {
         publicPath: path.join(__dirname, 'public')
     });
     startNewGame();
+});
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Keep track of connections
+server.on('connection', (socket) => {
+    socket.on('error', (err) => {
+        log('Socket error:', err);
+    });
+});
+
+// Handle WebSocket errors
+wss.on('error', (err) => {
+    log('WebSocket server error:', err);
 });
 
 // Error handling
