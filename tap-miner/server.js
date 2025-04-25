@@ -16,6 +16,21 @@ let isShuttingDown = false;
 const app = express();
 const server = http.createServer(app);
 
+// Serve static files with caching
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1h',
+    etag: true,
+    lastModified: true
+}));
+
+// Basic security headers
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    next();
+});
+
 // Enable WebSocket server with client tracking
 const wss = new WebSocket.Server({ 
     server,
@@ -171,6 +186,16 @@ wss.on('connection', (ws) => {
 const PORT = process.env.PORT || 3001;
 const PRODUCTION = process.env.RAILWAY_STATIC_URL ? true : false;
 
+// Verify environment
+if (!path.join(__dirname, 'public')) {
+    console.error('Error: Public directory not found');
+    process.exit(1);
+}
+
+// Keep alive ping interval
+const PING_INTERVAL = 30000; // 30 seconds
+const PING_TIMEOUT = 5000;  // 5 seconds timeout
+
 console.log('Environment:', {
     PORT: PORT,
     PRODUCTION: PRODUCTION,
@@ -181,9 +206,19 @@ console.log('Environment:', {
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Health check endpoint for Railway
+// Enhanced health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy' });
+    const health = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        connections: {
+            total: wss.clients.size,
+            active: Array.from(wss.clients).filter(client => client.isAlive).length
+        }
+    };
+    res.status(200).json(health);
 });
 
 // Graceful shutdown function
@@ -224,7 +259,7 @@ function gracefulShutdown(signal) {
 }
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
     log('Server configuration:', {
         port: PORT,
