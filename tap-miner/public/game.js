@@ -1,6 +1,18 @@
 class TapMinerGame {
     constructor() {
         this.ws = null;
+        this.playerName = '';
+        this.connected = false;
+        this.gameStarted = false;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        
+        // Debug mode
+        this.debug = true;
+        this.log = (...args) => this.debug && console.log(new Date().toISOString(), ...args);
+    }
+    constructor() {
+        this.ws = null;
         this.playerId = null;
         this.playerName = null;
         this.tapCount = 0;
@@ -33,6 +45,7 @@ class TapMinerGame {
         this.tapArea = document.getElementById('tap-area');
         this.nextGameCountdown = document.getElementById('next-game-countdown');
         this.winnerDetails = document.getElementById('winner-details');
+        this.gameStatus = document.getElementById('game-status');
     }
 
     attachEventListeners() {
@@ -44,21 +57,41 @@ class TapMinerGame {
     }
 
     connectWebSocket() {
-        this.ws = new WebSocket(`ws://${window.location.hostname}:3001`);
+        if (this.ws) {
+            this.ws.close();
+        }
+
+        // Use secure WebSocket in production
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // Don't add port in production (Railway) environment
+        const isProduction = window.location.hostname.includes('railway.app');
+        const port = isProduction ? '' : ':3001';
+        
+        const wsUrl = `${protocol}//${window.location.hostname}${port}`;
+        this.log('Connecting to WebSocket:', wsUrl);
+        
+        this.ws = new WebSocket(wsUrl);
+        
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.handleConnectionError();
+        };
         
         this.ws.onopen = () => {
             console.log('Connected to game server');
+            this.connected = true;
+            this.gameStatus.textContent = 'Connected';
         };
 
         this.ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            this.handleServerMessage(message);
+            this.handleMessage(event);
         };
 
         this.ws.onclose = () => {
             console.log('Disconnected from server');
-            // Attempt to reconnect after 5 seconds
-            setTimeout(() => this.connectWebSocket(), 5000);
+            this.connected = false;
+            this.gameStatus.textContent = 'Disconnected';
+            this.handleConnectionError();
         };
     }
 
@@ -66,18 +99,35 @@ class TapMinerGame {
         const name = this.playerNameInput.value.trim();
         if (name) {
             this.playerName = name;
+            this.log('Starting game for player:', name);
+            this.loginScreen.style.display = 'none';
+            this.gameScreen.style.display = 'block';
             this.connectWebSocket();
-            this.ws.onopen = () => {
-                this.ws.send(JSON.stringify({
-                    type: 'join',
-                    playerName: name
-                }));
-            };
+            
+            // Show loading state
+            this.gameStatus.textContent = 'Connecting...';
+        } else {
+            alert('Please enter your name to start!');
         }
     }
 
     handleTap() {
         if (!this.gameActive) return;
+        
+        if (!this.connected) {
+            this.log('Cannot tap: not connected');
+            return;
+        }
+        
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'tap',
+                playerName: this.playerName
+            }));
+        } else {
+            this.log('Cannot tap: WebSocket not ready');
+            this.handleConnectionError();
+        }
         
         this.tapCount++;
         this.tapCounter.textContent = this.tapCount;

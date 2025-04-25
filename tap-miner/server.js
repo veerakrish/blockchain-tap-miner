@@ -2,10 +2,24 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const crypto = require('crypto');
+const path = require('path');
+
+// Enable debug logging
+const DEBUG = true;
+function log(...args) {
+    if (DEBUG) console.log(new Date().toISOString(), ...args);
+}
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+// Enable WebSocket server with client tracking
+const wss = new WebSocket.Server({ 
+    server,
+    // Enable ping/pong heartbeat
+    clientTracking: true,
+    heartbeat: true
+});
 
 // Serve static files
 app.use(express.static('public'));
@@ -150,9 +164,67 @@ wss.on('connection', (ws) => {
     });
 });
 
+// Production settings
+const PORT = process.env.PORT || 3001;
+const PRODUCTION = process.env.RAILWAY_STATIC_URL ? true : false;
+
+console.log('Environment:', {
+    PORT: PORT,
+    PRODUCTION: PRODUCTION,
+    NODE_ENV: process.env.NODE_ENV,
+    RAILWAY_STATIC_URL: process.env.RAILWAY_STATIC_URL
+});
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Health check endpoint for Railway
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy' });
+});
+
 // Start server
-const PORT = 3001;
 server.listen(PORT, () => {
-    console.log(`Tap Miner game server running on port ${PORT}`);
+    log(`Tap Miner game server running on port ${PORT} in ${PRODUCTION ? 'production' : 'development'} mode`);
+    log('Server configuration:', {
+        port: PORT,
+        production: PRODUCTION,
+        nodeEnv: process.env.NODE_ENV,
+        publicPath: path.join(__dirname, 'public')
+    });
     startNewGame();
 });
+
+// Error handling
+server.on('error', (error) => {
+    console.error('Server error:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Implement WebSocket heartbeat
+function heartbeat() {
+    this.isAlive = true;
+}
+
+wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+});
+
+// Check for stale connections every 30 seconds
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
