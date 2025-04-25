@@ -18,12 +18,50 @@ app.use(express.static(path.join(__dirname, 'public')));
 // WebSocket server setup
 const wss = new WebSocket.Server({ server });
 
-// Game state
+// WebSocket connection handling
+wss.on('connection', (ws, req) => {
+    log('New client connected from:', req.socket.remoteAddress);
+    
+    ws.isAlive = true;
+    ws.on('pong', () => ws.isAlive = true);
+    
+    ws.on('error', (error) => {
+        log('WebSocket error:', error);
+    });
+    
+    ws.on('close', () => {
+        log('Client disconnected');
+    });
+});
+
+// Keep-alive mechanism
+const pingInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            log('Terminating inactive client');
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+
+wss.on('close', () => {
+    clearInterval(pingInterval);
+});
+
+// Server and game state
+let serverState = {
+    isShuttingDown: false,
+    connections: 0
+};
+
 let gameState = {
     isActive: false,
-    players: new Map(),
-    hashes: [],
     startTime: null,
+    players: new Map(),
+    winner: null,
+    targetZeros: 2,
     duration: 120000 // 2 minutes in milliseconds
 };
 
@@ -41,7 +79,6 @@ function countLeadingZeros(hash) {
 function startNewGame() {
     gameState.isActive = true;
     gameState.players.clear();
-    gameState.hashes = [];
     gameState.startTime = Date.now();
 
     // Broadcast game start
@@ -160,11 +197,22 @@ wss.on('connection', (ws) => {
 
 // Server settings
 const PORT = process.env.PORT || 3001;
-let isShuttingDown = false;
 
-// Basic health check
+// Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+    const health = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        connections: wss.clients.size,
+        game: {
+            active: gameState.isActive,
+            players: gameState.players.size,
+            timeRemaining: gameState.isActive ? 
+                Math.max(0, (gameState.startTime + gameState.duration) - Date.now()) : 0
+        }
+    };
+    res.json(health);
 });
 
 // Log environment details
@@ -174,51 +222,13 @@ log('Environment:', {
     railwayUrl: process.env.RAILWAY_STATIC_URL || 'not set'
 });
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Enhanced health check endpoint
-app.get('/health', (req, res) => {
-    const health = {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        memory: process.memoryUsage(),
-        connections: {
-            total: wss.clients.size,
-            active: Array.from(wss.clients).filter(client => client.isAlive).length
-        }
-    };
-    res.status(200).json(health);
-});
-
-// Graceful shutdown function
+// Graceful shutdown handler
 function gracefulShutdown(signal) {
-    if (serverState.isShuttingDown) {
-        log('Shutdown already in progress, ignoring', signal);
-        return;
-    }
+    log(`Received ${signal}`);
+    if (serverState.isShuttingDown) return;
     
     serverState.isShuttingDown = true;
-    log(`Received ${signal}. Starting graceful shutdown...`);
-    
-    // Stop accepting new connections
-    server.unref();
-    
-    // Stop game timer if running
-    if (gameTimer) {
-        clearTimeout(gameTimer);
-    }
-
-    // Notify all clients
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: 'system',
-                message: 'Server is shutting down...'
-            }));
-        }
-    });
+    log('Starting graceful shutdown...');
 
     // Close WebSocket server
     wss.close(() => {
@@ -229,14 +239,18 @@ function gracefulShutdown(signal) {
             log('HTTP server closed.');
             process.exit(0);
         });
-
-        // Force close after 10 seconds
-        setTimeout(() => {
-            log('Forcing shutdown after timeout');
-            process.exit(1);
-        }, 10000);
     });
+
+    // Force shutdown after timeout
+    setTimeout(() => {
+        log('Forcing shutdown after timeout');
+        process.exit(1);
+    }, 10000);
 }
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start server
 server.listen(PORT, () => {
@@ -247,17 +261,6 @@ server.listen(PORT, () => {
 // Handle errors
 server.on('error', (error) => {
     log('Server error:', error);
-});
-
-process.on('SIGTERM', () => {
-    log('Received SIGTERM');
-    if (!isShuttingDown) {
-        isShuttingDown = true;
-        server.close(() => {
-            log('Server closed');
-            process.exit(0);
-        });
-    }
 });
 
 // Handle shutdown signals
